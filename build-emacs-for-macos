@@ -109,8 +109,13 @@ class Build
       err 'Failed to get commit info from GitHub.'
     end
 
-    tarball = download_tarball(meta[:sha])
-    @source_dir = extract_tarball(tarball, patches(options))
+    if options[:local].nil?
+      tarball = download_tarball(meta[:sha])
+      @source_dir = extract_tarball(tarball, patches(options), false)
+    else
+      info "Running local build"
+      @source_dir = extract_tarball(options[:local], patches(options), true)
+    end
 
     autogen
     detect_native_comp if options[:native_comp].nil?
@@ -218,20 +223,25 @@ class Build
     target
   end
 
-  def extract_tarball(filename, patches = [])
+  def extract_tarball(filename, patches = [], local)
     FileUtils.mkdir_p(sources_dir)
 
-    dirname = File.basename(filename).gsub(/\.\w+$/, '')
-    target = File.join(sources_dir, dirname)
+    dirname = filename
+    target = File.join(sources_dir, "emacs-local")
 
     if File.exist?(target)
-      info "#{dirname} source tree exists, attempting to use."
-      return target
+      if local
+        info "#{dirname} source tree exists, Reusing."
+        FileUtils.rm_r(target)
+      else
+        return
+      end
     end
 
-    info 'Extracting tarball...'
-    result = run_cmd('tar', '-xzf', filename, '-C', sources_dir)
-    err 'Tarball extraction failed.' unless result
+    # info 'Extracting tarball...'
+    # result = run_cmd('tar', '-xzf', filename, '-C', sources_dir)
+    # err 'Tarball extraction failed.' unless result
+    FileUtils.cp_r(dirname, target)
 
     patches.each { |patch| apply_patch(patch, target) }
 
@@ -1292,6 +1302,11 @@ if __FILE__ == $PROGRAM_NAME
               'Enable/disable keeping source folder for archive ' \
               '(default: disabled)') do |v|
         cli_options[:archive_keep] = v
+      end
+
+      opts.on('--local x',
+              'Use a local path instead of pulling source from github ') do |v|
+        cli_options[:local] = v
       end
 
       opts.on(
