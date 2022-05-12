@@ -241,9 +241,12 @@ class Build
     # info 'Extracting tarball...'
     # result = run_cmd('tar', '-xzf', filename, '-C', sources_dir)
     # err 'Tarball extraction failed.' unless result
-    FileUtils.cp_r(dirname, target)
-
-    patches.each { |patch| apply_patch(patch, target) }
+    if not local
+      FileUtils.cp_r(dirname, target)
+      patches.each { |patch| apply_patch(patch, target) }
+    else
+      FileUtils.ln_s(dirname, target)
+    end
 
     target
   end
@@ -284,7 +287,9 @@ class Build
 
   def autogen
     FileUtils.cd(source_dir) do
-      if File.exist?('autogen/copy_autogen')
+      if File.exist?('Makefile')
+        info 'Skipping autogen.sh because Makefile exists in emacs-local directory.'
+      elsif File.exist?('autogen/copy_autogen')
         run_cmd 'autogen/copy_autogen'
       elsif File.exist?('autogen.sh')
         run_cmd './autogen.sh'
@@ -295,12 +300,6 @@ class Build
   def compile_source(source)
     target = File.join(source, 'nextstep')
     emacs_app = File.join(target, 'Emacs.app')
-
-    if File.exist?(emacs_app)
-      info 'Emacs.app already exists in ' \
-           "\"#{target.gsub(root_dir + '/', '')}\", attempting to use."
-      return emacs_app
-    end
 
     info 'Compiling from source. This will take a while...'
 
@@ -378,7 +377,11 @@ class Build
       configure_flags << native_comp_configure_flag if options[:native_comp]
       configure_flags << '--without-rsvg' if options[:rsvg] == false
 
-      run_cmd './configure', *configure_flags
+      if File.exist?("Makefile")
+        info "Skipping configure since makefile exists"
+      else
+        run_cmd './configure', *configure_flags
+      end
 
       # Disable aligned_alloc on Mojave and below. See issue:
       # https://github.com/daviderestivo/homebrew-emacs-head/issues/15
@@ -404,7 +407,7 @@ class Build
         end
       end
 
-      run_cmd 'make', *make_flags
+      run_cmd 'bear', '--', 'make', *make_flags
       run_cmd 'make', 'install'
     end
 
