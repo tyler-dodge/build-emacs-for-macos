@@ -376,6 +376,7 @@ class Build
       end
       configure_flags << native_comp_configure_flag if options[:native_comp]
       configure_flags << '--without-rsvg' if options[:rsvg] == false
+      configure_flags << '--without-dbus' if options[:dbus] == false
 
       if File.exist?("Makefile")
         info "Skipping configure since makefile exists"
@@ -825,7 +826,8 @@ end
 class CSourcesEmbedder < AbstractEmbedder
   PATH_PATCH = <<~ELISP
     ;; Allow Emacs to find bundled C sources.
-    (setq source-directory (expand-file-name ".."))
+    (setq source-directory
+      (expand-file-name ".." (file-name-directory load-file-name)))
   ELISP
 
   attr_reader :source_dir
@@ -1138,7 +1140,8 @@ class GccInfo
 
   def libgccjit_lib_dir
     @libgccjit_lib_dir ||= Dir[
-      File.join(libgccjit_root_dir, 'lib/gcc/*/libgccjit.so*')
+      File.join(libgccjit_root_dir, 'lib/gcc/*/libgccjit*.dylib'),
+      File.join(libgccjit_root_dir, 'lib/gcc/*/libgccjit.so*'),
     ]
                            .map { |path| File.dirname(path) }
                            .select { |path| File.basename(path).match(/^\d+$/) }
@@ -1188,6 +1191,7 @@ if __FILE__ == $PROGRAM_NAME
     native_march: false,
     parallel: Etc.nprocessors,
     rsvg: true,
+    dbus: true,
     xwidgets: true,
     github_auth: true,
     dist_include: ['COPYING'],
@@ -1252,6 +1256,11 @@ if __FILE__ == $PROGRAM_NAME
               'Enable/disable SVG image support via librsvg ' \
               '(default: enabled)') do |v|
         cli_options[:rsvg] = v
+      end
+
+      opts.on('--[no-]dbus',
+              'Enable/disable dbus support (default: enabled)') do |v|
+        cli_options[:dbus] = v
       end
 
       opts.on('--no-titlebar', 'Apply no-titlebar patch (default: disabled)') do
