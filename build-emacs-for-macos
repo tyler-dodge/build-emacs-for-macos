@@ -287,7 +287,7 @@ class Build
 
   def autogen
     FileUtils.cd(source_dir) do
-      if File.exist?('Makefile')
+      if File.exist?('Makefile') and not options[:clean_build] 
         info 'Skipping autogen.sh because Makefile exists in emacs-local directory.'
       elsif File.exist?('autogen/copy_autogen')
         run_cmd 'autogen/copy_autogen'
@@ -311,7 +311,7 @@ class Build
 
         ENV['CFLAGS'] = [
           "-I#{File.join(gcc_info.root_dir, 'include')}",
-          "-I#{File.join(gcc_info.libgccjit_root_dir, 'include')}",
+          "-I/usr/local/Cellar/libgccjit/12.2.0/include",
           '-O2',
           (options[:native_march] ? '-march=native' : nil),
           ENV['CFLAGS']
@@ -321,6 +321,7 @@ class Build
           "-L#{gcc_info.lib_dir}",
           "-L#{gcc_info.darwin_lib_dir}",
           "-L#{gcc_info.libgccjit_lib_dir}",
+	  "-L/usr/local/Cellar/libgccjit/12.2.0/lib",
           "-I#{File.join(gcc_info.root_dir, 'include')}",
           "-I#{File.join(gcc_info.libgccjit_root_dir, 'include')}",
           # Ensure library re-linking and code signing will work after building.
@@ -331,6 +332,7 @@ class Build
         ENV['LIBRARY_PATH'] = [
           gcc_info.lib_dir,
           gcc_info.darwin_lib_dir,
+	  "-L/usr/local/Cellar/libgccjit/12.2.0/lib",
           gcc_info.libgccjit_lib_dir,
           ENV['LIBRARY_PATH']
         ].compact.join(':')
@@ -365,6 +367,8 @@ class Build
 
       configure_flags = [
         '--with-ns',
+        '--without-libgmp',
+        "--with-webp=no",
         '--with-modules',
         '--enable-locallisppath=' \
         '/Library/Application Support/Emacs/${version}/site-lisp:' \
@@ -374,11 +378,11 @@ class Build
       if options[:xwidgets] && supports_xwidgets?
         configure_flags << '--with-xwidgets'
       end
-      configure_flags << native_comp_configure_flag if options[:native_comp]
+      configure_flags << '--with-native-compilation=aot'
       configure_flags << '--without-rsvg' if options[:rsvg] == false
       configure_flags << '--without-dbus' if options[:dbus] == false
 
-      if File.exist?("Makefile")
+      if File.exist?("Makefile") and not options[:clean_build]
         info "Skipping configure since makefile exists"
       else
         run_cmd './configure', *configure_flags
@@ -408,7 +412,12 @@ class Build
         end
       end
 
-      run_cmd 'bear', '--', 'make', *make_flags
+      if options[:clean_build]
+        run_cmd 'make', 'clean'
+        run_cmd 'bear', '--', 'make', *make_flags
+      else
+        run_cmd 'make', *make_flags
+      end
       run_cmd 'make', 'install'
     end
 
@@ -1141,6 +1150,7 @@ class GccInfo
   def libgccjit_lib_dir
     @libgccjit_lib_dir ||= Dir[
       File.join(libgccjit_root_dir, 'lib/gcc/*/libgccjit*.dylib'),
+      File.join(libgccjit_root_dir, 'lib/gcc/*/libgccjit.dylib'),
       File.join(libgccjit_root_dir, 'lib/gcc/*/libgccjit.so*'),
     ]
                            .map { |path| File.dirname(path) }
@@ -1150,7 +1160,6 @@ class GccInfo
 
   def verify_libgccjit
     err 'gcc not installed' unless Dir.exist?(root_dir)
-    err 'libgccjit not installed' unless Dir.exist?(libgccjit_root_dir)
 
     if libgccjit_lib_dir&.empty?
       err "Detected libgccjit (#{libgccjit_root_dir}) does not have any " \
@@ -1314,6 +1323,11 @@ if __FILE__ == $PROGRAM_NAME
               'Enable/disable keeping source folder for archive ' \
               '(default: disabled)') do |v|
         cli_options[:archive_keep] = v
+      end
+
+      opts.on('--clean-build',
+              'Does a clean build and generates compile_commands.json ') do |v|
+        cli_options[:clean_build] = v
       end
 
       opts.on('--local x',
