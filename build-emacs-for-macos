@@ -268,9 +268,7 @@ class Build
   end
 
   def native_comp_configure_flag
-    @native_comp_configure_flag ||= configure_help.match(
-      /\s+(--with-native(?:comp|-compilation))\s+/
-    )&.[](1)
+    @native_comp_configure_flag ||= true
   end
 
   def detect_native_comp
@@ -311,7 +309,7 @@ class Build
 
         ENV['CFLAGS'] = [
           "-I#{File.join(gcc_info.root_dir, 'include')}",
-          "-I/usr/local/Cellar/libgccjit/12.2.0/include",
+          "-I#{File.join(gcc_info.libgccjit_root_dir, 'include')}",
           '-O2',
           (options[:native_march] ? '-march=native' : nil),
           ENV['CFLAGS']
@@ -321,24 +319,23 @@ class Build
           "-L#{gcc_info.lib_dir}",
           "-L#{gcc_info.darwin_lib_dir}",
           "-L#{gcc_info.libgccjit_lib_dir}",
-	  "-L/usr/local/Cellar/libgccjit/12.2.0/lib",
           "-I#{File.join(gcc_info.root_dir, 'include')}",
           "-I#{File.join(gcc_info.libgccjit_root_dir, 'include')}",
           # Ensure library re-linking and code signing will work after building.
           '-Wl,-headerpad_max_install_names',
-          ENV['LDFLAGS']
-        ].compact.join(' ')
+          ENV['LDFLAGS'] ].compact.join(' ')
+        info(ENV['LDFLAGS'])
 
         ENV['LIBRARY_PATH'] = [
           gcc_info.lib_dir,
           gcc_info.darwin_lib_dir,
-	  "-L/usr/local/Cellar/libgccjit/12.2.0/lib",
           gcc_info.libgccjit_lib_dir,
           ENV['LIBRARY_PATH']
         ].compact.join(':')
       end
 
       ENV['CC'] = 'clang'
+   
       ENV['PKG_CONFIG_PATH'] = [
         File.join(brew_dir, 'lib/pkgconfig'),
         File.join(brew_dir, 'share/pkgconfig'),
